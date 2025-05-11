@@ -8,6 +8,6 @@ chmod +x switchly.sh
 ```
 2. Run the script like this:
 ```
-./switchly.sh "$disk" "$username" "$userpass" "$rootpass" "$hostname"
+./switchly.sh "$edition" "$disk" "$username" "$userpass" "$rootpass" "$hostname"
 ````
 3. Done!

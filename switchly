@@ -1,0 +1,64 @@
+#!/bin/zsh
+
+# Arguments
+edition="$1"
+disk="$2"
+username="$3"
+userpass="$4"
+rootpass="$5"
+hostname="$6"
+
+# Partition suffix (p1/p2 for NVMe, just 1/2 for others)
+if [[ "$disk" == *"nvme"* ]]; then
+    part1="${disk}p1"
+    part2="${disk}p2"
+else
+    part1="${disk}1"
+    part2="${disk}2"
+fi
+
+echo "[*] Wiping and partitioning $disk..."
+wipefs -af "$disk"
+sgdisk -o "$disk"
+sgdisk -n 1::+512M -t 1:ef00 -c 1:"EFI System" "$disk"
+sgdisk -n 2:: -t 2:8300 -c 2:"Linux Root" "$disk"
+
+echo "[*] Formatting partitions..."
+mkfs.fat -F32 "$part1"
+mkfs.ext4 "$part2"
+
+echo "[*] Mounting partitions..."
+mount "$part2" /mnt
+mkdir -p /mnt/boot
+mount "$part1" /mnt/boot
+
+echo "[*] Installing base system..."
+pacstrap /mnt base linux linux-firmware sudo zsh
+
+echo "[*] Generating fstab..."
+genfstab -U /mnt >> /mnt/etc/fstab
+
+echo "[*] Setting hostname and user configuration..."
+arch-chroot /mnt /bin/zsh <<EOF
+echo "$hostname" > /etc/hostname
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+echo "[*] Setting root password..."
+echo "root:$rootpass" | chpasswd
+
+echo "[*] Creating user..."
+useradd -m -G wheel -s /bin/zsh "$username"
+echo "$username:$userpass" | chpasswd
+echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
+EOF
+
+echo "[*] Installing edition: $edition"
+arch-chroot /mnt /bin/zsh <<EOF
+curl -sL https://raw.githubusercontent.com/nogeese-org/switchly-editions/main/${edition}.sh | zsh
+EOF
+
+echo "[✓] Done! You may now reboot."
